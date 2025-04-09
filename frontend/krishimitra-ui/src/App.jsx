@@ -48,7 +48,7 @@ function App() {
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  
+
   const mediaRecorderRef = useRef(null);
   const audioChunks = useRef([]);
   const audioRef = useRef(null);
@@ -57,17 +57,17 @@ function App() {
     'English', 'Hindi', 'Tamil', 'Telugu', 'Kannada', 'Malayalam',
     'Bengali', 'Marathi', 'Gujarati', 'Punjabi', 'Urdu'
   ];
-  
+
   // Save language preference when it changes
   useEffect(() => {
     localStorage.setItem('krishimitraLanguage', selectedLanguage);
   }, [selectedLanguage]);
-  
+
   // Save chat history when it changes
   useEffect(() => {
     localStorage.setItem('krishimitraChatHistory', JSON.stringify(chatHistory));
   }, [chatHistory]);
-  
+
   // PWA installation prompt
   useEffect(() => {
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -78,7 +78,7 @@ function App() {
       // Show the install button
       setShowInstallPrompt(true);
     });
-    
+
     window.addEventListener('appinstalled', () => {
       // Hide the install button
       setShowInstallPrompt(false);
@@ -87,22 +87,22 @@ function App() {
       // Log the installation to analytics
       console.log('PWA was installed');
     });
-    
+
     return () => {
       window.removeEventListener('beforeinstallprompt', () => {});
       window.removeEventListener('appinstalled', () => {});
     };
   }, []);
-  
+
   // Online/offline detection
   useEffect(() => {
     const handleOnlineStatus = () => {
       setIsOnline(navigator.onLine);
     };
-    
+
     window.addEventListener('online', handleOnlineStatus);
     window.addEventListener('offline', handleOnlineStatus);
-    
+
     return () => {
       window.removeEventListener('online', handleOnlineStatus);
       window.removeEventListener('offline', handleOnlineStatus);
@@ -112,8 +112,25 @@ function App() {
   const startRecording = async () => {
     try {
       setError('');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      console.log('Requesting microphone access...');
+
+      // Request microphone access with explicit error handling
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false
+      }).catch(err => {
+        console.error('Microphone access error:', err.name, err.message);
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          throw new Error('Microphone access denied. Please allow microphone access in your browser settings.');
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          throw new Error('No microphone found. Please connect a microphone and try again.');
+        } else {
+          throw err;
+        }
+      });
+
+      console.log('Microphone access granted, creating MediaRecorder...');
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = mediaRecorder;
       audioChunks.current = [];
 
@@ -128,42 +145,64 @@ function App() {
           const timestamp = new Date().toISOString();
           const questionBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
           const questionURL = URL.createObjectURL(questionBlob);
-          
+
           // Create a FormData object for the API request
           const formData = new FormData();
           formData.append('audio', questionBlob, 'voice.webm');
 
           // Send to backend
-          const response = await fetch(`http://localhost:8000/voice-ask/?language=${selectedLanguage}`, {
-            method: 'POST',
-            body: formData,
-          });
+          console.log(`Sending audio to backend with language: ${selectedLanguage}`);
+          let responseBlob, responseURL;
 
-          if (!response.ok) {
-            throw new Error(`Server responded with ${response.status}`);
+          try {
+            const response = await fetch(`http://localhost:8000/voice-ask/?language=${selectedLanguage}`, {
+              method: 'POST',
+              body: formData,
+              // Add explicit headers for CORS
+              headers: {
+                'Accept': 'audio/mpeg, audio/mp3, audio/*'
+              }
+            });
+
+            if (!response.ok) {
+              console.error(`Server error: ${response.status} ${response.statusText}`);
+              throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+
+            console.log('Response received successfully');
+
+            // Get the response audio
+            responseBlob = await response.blob();
+            responseURL = URL.createObjectURL(responseBlob);
+            setResponseAudio(responseURL);
+
+            // Auto-play the response
+            if (audioRef.current) {
+              console.log('Playing audio response...');
+              audioRef.current.src = responseURL;
+              audioRef.current.play().catch(playError => {
+                console.error('Audio playback error:', playError);
+                setError(`Audio playback error: ${playError.message}. Try clicking the audio player manually.`);
+              });
+            }
+          } catch (fetchError) {
+            console.error('Fetch error:', fetchError);
+            throw new Error(`Network error: ${fetchError.message}. Please check your connection and try again.`);
           }
 
-          // Get the response audio
-          const responseBlob = await response.blob();
-          const responseURL = URL.createObjectURL(responseBlob);
-          setResponseAudio(responseURL);
-          
-          // Auto-play the response
-          if (audioRef.current) {
-            audioRef.current.src = responseURL;
-            audioRef.current.play();
+          // Add to chat history only if we have a response
+          if (responseURL) {
+            const newChatEntry = {
+              id: Date.now().toString(),
+              timestamp,
+              language: selectedLanguage,
+              questionAudio: questionURL,
+              responseAudio: responseURL,
+            };
+
+            console.log('Adding to chat history:', newChatEntry);
+            setChatHistory(prevHistory => [newChatEntry, ...prevHistory]);
           }
-          
-          // Add to chat history
-          const newChatEntry = {
-            id: Date.now().toString(),
-            timestamp,
-            language: selectedLanguage,
-            questionAudio: questionURL,
-            responseAudio: responseURL,
-          };
-          
-          setChatHistory(prevHistory => [newChatEntry, ...prevHistory]);
         } catch (err) {
           console.error('Error processing audio:', err);
           setError(`Error: ${err.message}`);
@@ -184,7 +223,7 @@ function App() {
     if (mediaRecorderRef.current && recording) {
       mediaRecorderRef.current.stop();
       setRecording(false);
-      
+
       // Stop all tracks on the stream
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
     }
@@ -209,14 +248,14 @@ function App() {
               <p className="text-xs text-gray-500 dark:text-gray-400">AI Farming Assistant</p>
             </div>
           </div>
-          
+
           {/* Online/Offline Indicator */}
           <div className="flex items-center space-x-4">
             <div className="flex items-center">
               <div className={`w-2 h-2 rounded-full mr-2 ${isOnline ? 'bg-green-500' : 'bg-red-500'}`}></div>
               <span className="text-sm text-gray-600 dark:text-gray-300">{isOnline ? 'Online' : 'Offline'}</span>
             </div>
-            
+
             {/* PWA Install Button */}
             {showInstallPrompt && (
               <motion.button
@@ -238,7 +277,7 @@ function App() {
           </div>
         </div>
       </header>
-      
+
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden">
           {/* Hero Section */}
@@ -253,9 +292,9 @@ function App() {
                 </pattern>
               </defs>
             </div>
-            
+
             <div className="relative z-10 text-center">
-              <motion.h2 
+              <motion.h2
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
@@ -276,7 +315,7 @@ function App() {
                 <GlobeAltIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Select Your Language</h3>
               </div>
-              
+
               <Menu as="div" className="relative inline-block text-left">
                 <div>
                   <Menu.Button className="inline-flex w-full justify-center gap-x-1.5 rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-white shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">
@@ -318,7 +357,7 @@ function App() {
                 </Transition>
               </Menu>
             </div>
-            
+
             <div className="flex flex-wrap gap-2 mt-4">
               {languages.map((lang) => (
                 <motion.button
@@ -345,7 +384,7 @@ function App() {
                 Speak in {selectedLanguage} and get instant farming advice. Just tap the microphone button below.
               </p>
             </div>
-            
+
             <div className="flex justify-center mb-8">
               <AnimatePresence mode="wait">
                 {recording ? (
@@ -380,10 +419,10 @@ function App() {
                 )}
               </AnimatePresence>
             </div>
-            
+
             <div className="text-center text-sm text-gray-500 dark:text-gray-400">
               {recording ? (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="text-red-500 dark:text-red-400 font-medium flex items-center justify-center space-x-2"
@@ -392,7 +431,7 @@ function App() {
                   <span>Recording... Speak now and tap the button when finished</span>
                 </motion.div>
               ) : processing ? (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="text-blue-500 dark:text-blue-400 font-medium flex items-center justify-center space-x-2"
@@ -401,7 +440,7 @@ function App() {
                   <span>Processing your question...</span>
                 </motion.div>
               ) : responseAudio ? (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="text-green-600 dark:text-green-400 font-medium flex items-center justify-center space-x-2"
@@ -417,7 +456,7 @@ function App() {
 
           {/* Offline notification */}
           {!isOnline && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               className="p-4 bg-amber-50 dark:bg-amber-900 border border-amber-200 dark:border-amber-700 rounded-xl shadow-md mt-6 mx-6"
@@ -433,10 +472,10 @@ function App() {
               </div>
             </motion.div>
           )}
-          
+
           {/* Hidden audio element for playback */}
           <audio ref={audioRef} className="hidden" controls />
-          
+
           {/* Chat History Section */}
           {chatHistory.length > 0 && (
             <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-lg mt-6 mx-6 mb-6">
@@ -447,7 +486,7 @@ function App() {
                     {chatHistory.length}
                   </span>
                 </h3>
-                
+
                 {chatHistory.length > 0 && (
                   <button
                     onClick={() => {
@@ -462,7 +501,7 @@ function App() {
                   </button>
                 )}
               </div>
-              
+
               <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
                 <AnimatePresence>
                   {chatHistory.map((chat) => (
@@ -482,10 +521,10 @@ function App() {
                             {chat.language}
                           </span>
                         </div>
-                        <button 
+                        <button
                           onClick={() => {
                             if (confirm('Are you sure you want to delete this conversation?')) {
-                              setChatHistory(prevHistory => 
+                              setChatHistory(prevHistory =>
                                 prevHistory.filter(item => item.id !== chat.id)
                               );
                             }
@@ -495,7 +534,7 @@ function App() {
                           <XMarkIcon className="h-4 w-4" />
                         </button>
                       </div>
-                      
+
                       <div className="space-y-3">
                         <div className="bg-white dark:bg-gray-800 rounded-lg p-3">
                           <div className="flex items-center text-sm text-gray-700 dark:text-gray-300 mb-2">
@@ -506,7 +545,7 @@ function App() {
                           </div>
                           <audio src={chat.questionAudio} controls className="w-full h-8" />
                         </div>
-                        
+
                         <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-3">
                           <div className="flex items-center text-sm text-gray-700 dark:text-gray-300 mb-2">
                             <div className="bg-blue-100 dark:bg-blue-900 p-1 rounded-full mr-2">
@@ -527,7 +566,7 @@ function App() {
           )}
         </div>
       </main>
-      
+
       <footer className="bg-white dark:bg-gray-800 shadow-md mt-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col md:flex-row justify-between items-center">
@@ -536,7 +575,7 @@ function App() {
               <span>•</span>
               <span>Powered by AI for Indian Farmers</span>
             </div>
-            
+
             <div className="flex items-center">
               <div className={`w-2 h-2 rounded-full mr-2 ${isOnline ? 'bg-green-500' : 'bg-red-500'}`}></div>
               <span className="text-sm text-gray-600 dark:text-gray-300">{isOnline ? 'Online' : 'Offline'}</span>
