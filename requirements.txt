@@ -3,3 +3,7 @@ uvicorn
 openai
 python-dotenv
 httpx
+whisper
+gtts
+pydub
+ffmpeg-python
