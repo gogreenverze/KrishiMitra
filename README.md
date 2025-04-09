@@ -1,25 +1,34 @@
 # KrishiMitra - Multilingual AI Assistant for Farmers
 
-KrishiMitra is a FastAPI-based backend that accepts a farmer's question in any Indian language and returns a GPT-generated response in the same language, tailored to agriculture.
+KrishiMitra is a multilingual AI assistant for Indian farmers that accepts questions in any Indian language and returns GPT-generated responses tailored to agriculture. It features both text and voice interfaces, with a Progressive Web App (PWA) frontend for easy access on mobile devices.
 
 ## Project Structure
 
 ```
 krishimitra/
-├── main.py                  # FastAPI entry point
-├── agri_prompt.py           # GPT prompt template
-├── ai_agent.py              # GPT interaction logic
-├── voice_input.py           # Speech-to-text using Whisper
-├── voice_output.py          # Text-to-speech using gTTS
-├── requirements.txt         # Project dependencies
-├── .env                     # API keys (OpenAI, etc.)
-└── README.md                # Project documentation
+├── Backend/
+│   ├── main.py                  # FastAPI entry point
+│   ├── agri_prompt.py           # GPT prompt template
+│   ├── ai_agent.py              # GPT interaction logic
+│   ├── voice_input.py           # Speech-to-text using Whisper
+│   ├── voice_output.py          # Text-to-speech using gTTS
+│   ├── requirements.txt         # Project dependencies
+│   └── .env                     # API keys (OpenAI, etc.)
+├── Frontend/
+│   └── krishimitra-ui/           # React PWA frontend
+│       ├── src/                   # React source code
+│       ├── public/                # Static assets
+│       ├── package.json            # NPM dependencies
+│       └── vite.config.js          # Vite configuration
+└── README.md                    # Project documentation
 ```
 
 ## Setup
 
+### Backend Setup
+
 1. Clone the repository
-2. Install dependencies:
+2. Install backend dependencies:
    ```
    pip install -r requirements.txt
    ```
@@ -39,13 +48,35 @@ krishimitra/
    OPENAI_API_KEY=your_openai_key_here
    ```
 
+### Frontend Setup
+
+1. Navigate to the frontend directory:
+   ```
+   cd frontend/krishimitra-ui
+   ```
+2. Install frontend dependencies:
+   ```
+   npm install
+   ```
+
 ## Running the Application
+
+### Running the Backend
 
 ```bash
 uvicorn main:app --reload
 ```
 
 The API will be available at `http://127.0.0.1:8000`.
+
+### Running the Frontend
+
+```bash
+cd frontend/krishimitra-ui
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173`.
 
 ## API Endpoints
 
@@ -102,6 +133,8 @@ curl -X POST "http://127.0.0.1:8000/voice-ask/?language=Tamil" \
 - **Text Input/Output**: Traditional text-based interaction
 - **Voice Input/Output**: Speech-to-text and text-to-speech capabilities
 - **Agriculture Focus**: Tailored responses for farming-related queries
+- **Progressive Web App**: Mobile-friendly interface with microphone access
+- **Automatic Audio Playback**: Voice responses play automatically
 
 ## Future Enhancements
 
@@ -110,3 +143,6 @@ curl -X POST "http://127.0.0.1:8000/voice-ask/?language=Tamil" \
 - Add more agriculture-specific knowledge to the prompts
 - Integrate with SMS or WhatsApp for wider accessibility
 - Improve voice recognition for rural accents and dialects
+- Add offline support for common queries
+- Implement real-time transcription feedback
+- Support for image-based plant disease diagnosis
