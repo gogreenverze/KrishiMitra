@@ -69,6 +69,13 @@ async def ask_by_voice(audio: UploadFile = File(...), language: str = Form("Engl
     Returns:
         FileResponse: The audio file containing the response
     """
+    # Add language to the filename to help with language detection
+    original_filename = audio.filename
+    audio.filename = f"{language.lower()}_{original_filename}"
+
+    # Log the request details
+    print(f"Processing voice request in {language} language with file: {audio.filename}")
+
     # Step 1: Convert voice to text
     farmer_text = await transcribe_audio(audio)
 
