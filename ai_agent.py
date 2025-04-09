@@ -49,23 +49,68 @@ async def get_response_from_gpt(prompt):
             }
         }
 
-        # Determine the response category based on the prompt
-        category = "default"
-        if any(word in prompt.lower() for word in ["rice", "paddy", "चावल", "धान", "நெல்"]):
-            category = "rice"
-        elif any(word in prompt.lower() for word in ["pest", "insect", "कीट", "कीड़े", "பூச்சி"]):
-            category = "pest"
-        elif any(word in prompt.lower() for word in ["fertilizer", "manure", "उर्वरक", "खाद", "உரம்"]):
-            category = "fertilizer"
+        # Extract keywords from the prompt to determine the topic
+        keywords = {
+            "rice": ["rice", "paddy", "धान", "चावल", "நெல்", "அரிசி", "వరి", "బియ్యం"],
+            "wheat": ["wheat", "गेहूं", "கோதுமை", "గోధుమ"],
+            "pest": ["pest", "insect", "bug", "कीट", "कीड़े", "பூச்சி", "పురుగు"],
+            "fertilizer": ["fertilizer", "manure", "compost", "उर्वरक", "खाद", "உரம்", "ఎరువు"],
+            "water": ["water", "irrigation", "rain", "पानी", "सिंचाई", "நீர்", "பாசனம்", "నీరు", "నీటి"],
+            "soil": ["soil", "land", "मिट्टी", "भूमि", "மண்", "நிலம்", "నేల", "మట్టి"],
+            "organic": ["organic", "natural", "जैविक", "प्राकृतिक", "இயற்கை", "సహజ"],
+            "season": ["season", "weather", "climate", "मौसम", "जलवायु", "பருவம்", "காலநிலை", "సీజన్", "వాతావరణం"]
+        }
 
-        # Determine language
+        # Detect topics in the prompt
+        detected_topics = []
+        for topic, topic_keywords in keywords.items():
+            if any(word in prompt.lower() for word in topic_keywords):
+                detected_topics.append(topic)
+
+        # If no specific topics detected, use default
+        if not detected_topics:
+            detected_topics = ["default"]
+
+        # Determine language from the prompt
         language = "English"
         if any(char in prompt for char in "हिंदीफसलखेती"):
             language = "Hindi"
         elif any(char in prompt for char in "தமிழ்பயிர்நெல்"):
             language = "Tamil"
+        elif any(char in prompt for char in "తెలుగు"):
+            language = "Telugu"
 
-        return farming_responses[category][language]
+        # Add some randomness to the response selection
+        import random
+        import time
+
+        # Use current time for some randomness
+        random.seed(int(time.time()))
+
+        # Select a random topic from detected topics
+        selected_topic = random.choice(detected_topics)
+
+        # Get responses for the selected topic and language
+        responses = farming_responses.get(selected_topic, farming_responses["default"])
+        language_responses = responses.get(language, responses["English"])
+
+        # Return the response with some personalization based on the prompt
+        if "how" in prompt.lower() or "what" in prompt.lower() or "?" in prompt:
+            # It's a question, give a direct answer
+            return language_responses
+        else:
+            # It's not a clear question, add a prefix
+            prefixes = {
+                "English": ["Based on your question about farming, ", "Regarding your farming inquiry, ", "For your question about agriculture, "],
+                "Hindi": ["आपके खेती के सवाल के आधार पर, ", "आपके कृषि संबंधी प्रश्न के बारे में, "],
+                "Tamil": ["உங்கள் விவசாய கேள்வியின் அடிப்படையில், ", "உங்கள் வேளாண்மை கேள்விக்கு, "],
+                "Telugu": ["మీ వ్యవసాయ ప్రశ్న ఆధారంగా, ", "మీ వ్యవసాయ సంబంధిత ప్రశ్నకు, "]
+            }
+
+            prefix_list = prefixes.get(language, prefixes["English"])
+            selected_prefix = random.choice(prefix_list)
+
+            return selected_prefix + language_responses
     except Exception as e:
         print(f"Error getting response from GPT: {str(e)}")
         # Return a farming-related response as fallback

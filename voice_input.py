@@ -106,33 +106,73 @@ async def transcribe_audio(audio: UploadFile):
             }
         }
 
-        # Select a random question for each detected topic
+        # Use a combination of file metadata to create a more dynamic response
+        # This simulates what would happen with a real speech-to-text system
+
+        # Use file size to add some randomness
+        random.seed(file_size + timestamp)
+
+        # Select questions based on detected topics and add some randomness
         questions = []
         for topic in detected_topics:
             if topic in question_templates.get(language, question_templates["English"]):
                 topic_questions = question_templates[language][topic]
-                # Use timestamp to select a question deterministically
-                question_index = (timestamp + len(topic)) % len(topic_questions)
+                # Use a combination of factors to select a question
+                question_index = (timestamp + file_size + len(topic)) % len(topic_questions)
                 questions.append(topic_questions[question_index])
             else:
                 # Fallback to English if the topic doesn't exist in the selected language
                 if topic in question_templates["English"]:
                     topic_questions = question_templates["English"][topic]
-                    question_index = (timestamp + len(topic)) % len(topic_questions)
+                    question_index = (timestamp + file_size + len(topic)) % len(topic_questions)
                     questions.append(topic_questions[question_index])
 
-        # If no questions were generated, use a default question
+        # If no questions were generated, use a default question with some randomness
         if not questions:
             default_questions = {
-                "English": "How can I improve my farm's productivity this season?",
-                "Hindi": "मैं इस मौसम में अपने खेत की उत्पादकता कैसे बढ़ा सकता हूँ?",
-                "Tamil": "இந்த பருவத்தில் என் தோட்டத்தின் உற்பத்தித்திறனை எவ்வாறு மேம்படுத்துவது?",
-                "Telugu": "ఈ సీజన్‌లో నా పొలం ఉత్పాదకతను ఎలా మెరుగుపరచగలను?"
+                "English": [
+                    "How can I improve my farm's productivity this season?",
+                    "What are the best crops to plant right now?",
+                    "How can I protect my crops from the changing weather?",
+                    "What natural fertilizers work best for my crops?",
+                    "How can I conserve water in my farm during summer?"
+                ],
+                "Hindi": [
+                    "मैं इस मौसम में अपने खेत की उत्पादकता कैसे बढ़ा सकता हूँ?",
+                    "अभी कौन सी फसलें लगाना सबसे अच्छा है?",
+                    "मैं बदलते मौसम से अपनी फसलों की रक्षा कैसे कर सकता हूं?",
+                    "मेरी फसलों के लिए कौन से प्राकृतिक उर्वरक सबसे अच्छे काम करते हैं?"
+                ],
+                "Tamil": [
+                    "இந்த பருவத்தில் என் தோட்டத்தின் உற்பத்தித்திறனை எவ்வாறு மேம்படுத்துவது?",
+                    "இப்போது நடுவதற்கு சிறந்த பயிர்கள் எவை?",
+                    "மாறும் வானிலையிலிருந்து என் பயிர்களை எவ்வாறு பாதுகாக்கலாம்?"
+                ],
+                "Telugu": [
+                    "ఈ సీజన్‌లో నా పొలం ఉత్పాదకతను ఎలా మెరుగుపరచగలను?",
+                    "ప్రస్తుతం నాటడానికి ఉత్తమ పంటలు ఏవి?"
+                ]
             }
-            questions = [default_questions.get(language, default_questions["English"])]
 
-        # Return the first question (or combine multiple questions if needed)
-        return questions[0]
+            # Select a random default question based on language
+            lang_questions = default_questions.get(language, default_questions["English"])
+            question_index = random.randint(0, len(lang_questions) - 1)
+            questions = [lang_questions[question_index]]
+
+        # Sometimes combine questions for more variety (about 20% of the time)
+        if len(questions) > 1 and random.random() < 0.2:
+            # Join two questions with "Also" or similar connector
+            connectors = {
+                "English": ". Also, ",
+                "Hindi": "\u0964 \u0938\u093e\u0925 \u0939\u0940, ",
+                "Tamil": "\u0b94 \u0bae\u0bc7\u0bb2\u0bc1\u0bae\u0bcd, ",
+                "Telugu": "\u0c0a \u0c2e\u0c30\u0c3f\u0c2f\u0c41, "
+            }
+            connector = connectors.get(language, connectors["English"])
+            return questions[0] + connector + questions[1]
+        else:
+            # Return a single question with some randomness in selection
+            return questions[random.randint(0, len(questions) - 1)]
     finally:
         # Clean up the temporary file
         if os.path.exists(tmp_path):
